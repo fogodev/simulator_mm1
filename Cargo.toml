@@ -1,0 +1,9 @@
+[package]
+name = "simulador_ad"
+version = "0.1.0"
+authors = ["Ericson \"Fogo\" Soares <ericson.ds999@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.7.0"
+indicatif = "0.11"
