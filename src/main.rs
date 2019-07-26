@@ -5,9 +5,9 @@ use std::time::Instant;
 use simulator::simulator;
 use simulator::QueuePolicy;
 
-pub fn timing_simulation(rho: f64, queue_policy: QueuePolicy) {
+pub fn timing(rho: f64, transient_phase: usize, round_size: usize, queue_policy: QueuePolicy) {
     let now = Instant::now();
-    simulator(rho, 10_000, 5_000, 3200, queue_policy, 9999);
+    simulator(rho, transient_phase, round_size, 3200, queue_policy, 9999);
     println!(
         "ρ = {}; Tempo decorrido = {:0.5}s\n\n",
         rho,
@@ -16,18 +16,24 @@ pub fn timing_simulation(rho: f64, queue_policy: QueuePolicy) {
 }
 
 fn main() {
-    timing_simulation(0.2, QueuePolicy::FCFS);
-    timing_simulation(0.2, QueuePolicy::LCFS);
+    let runs = [1_000, 5_000, 10_000, 15_000, 20_000];
 
-    timing_simulation(0.4, QueuePolicy::FCFS);
-    timing_simulation(0.4, QueuePolicy::LCFS);
+    for &transient_phase in &runs {
+        for &round_size in &runs {
+            timing(0.2, transient_phase, round_size, QueuePolicy::FCFS);
+            timing(0.2, transient_phase, round_size, QueuePolicy::LCFS);
 
-    timing_simulation(0.6, QueuePolicy::FCFS);
-    timing_simulation(0.6, QueuePolicy::LCFS);
+            timing(0.4, transient_phase, round_size, QueuePolicy::FCFS);
+            timing(0.4, transient_phase, round_size, QueuePolicy::LCFS);
 
-    timing_simulation(0.8, QueuePolicy::FCFS);
-    timing_simulation(0.8, QueuePolicy::LCFS);
+            timing(0.6, transient_phase, round_size, QueuePolicy::FCFS);
+            timing(0.6, transient_phase, round_size, QueuePolicy::LCFS);
 
-    timing_simulation(0.9, QueuePolicy::FCFS);
-    timing_simulation(0.9, QueuePolicy::LCFS);
+            timing(0.8, transient_phase, round_size, QueuePolicy::FCFS);
+            timing(0.8, transient_phase, round_size, QueuePolicy::LCFS);
+
+            timing(0.9, transient_phase, round_size, QueuePolicy::FCFS);
+            timing(0.9, transient_phase, round_size, QueuePolicy::LCFS);
+        }
+    }
 }
