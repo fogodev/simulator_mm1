@@ -3,6 +3,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 
+// Função que recebe inúmeros dados e escreve de maneira organizada num arquivo .csv
 pub fn write_csv_file(
     rho: f64,
     clients: usize,
@@ -15,13 +16,15 @@ pub fn write_csv_file(
     mean_and_ic_nq: &[f64; 5],
     variance_and_ic_t_student_chi_square_nq: &[f64; 9],
 ) {
-    let csv_file_path = Path::new("output.csv");
+    let csv_file_path = Path::new("output.csv"); // Path do arquivo csv
     let mut file = if csv_file_path.exists() {
+        // Caso o arquivo já exista, abrimos o mesmo em modo append para inserir os dados ao final
         OpenOptions::new()
             .append(true)
             .open(csv_file_path)
             .expect("Unable to open csv file")
     } else {
+        // Caso não existe, criamos um novo arquivo e colocamos o cabeçalho das colunas nele
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -75,6 +78,7 @@ pub fn write_csv_file(
         file
     };
 
+    // Adicionamos os dados nas linhas do csv
     let mut output_string = format!("{},{},{},", rho, clients, transient_phase);
     for num in means_n_t_x
         .iter()

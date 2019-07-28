@@ -1,10 +1,14 @@
+// Módulo onde definimos o simulador
 mod simulator;
 
+// Funcionalidade de temporização da biblioteca padrão
 use std::time::Instant;
 
+// Importamos nosso simulador e o enum de política de fila
 use simulator::simulator;
 use simulator::QueuePolicy;
 
+// Função simplificada para chamar o simulador e medir seu tempo de execução
 pub fn timing(rho: f64, transient_phase: usize, round_size: usize, queue_policy: QueuePolicy) {
     let now = Instant::now();
     simulator(rho, transient_phase, round_size, 3200, queue_policy, 9999);
@@ -16,8 +20,10 @@ pub fn timing(rho: f64, transient_phase: usize, round_size: usize, queue_policy:
 }
 
 fn main() {
+    // Tamanhos de fase transiente e quantidade de fregueses por rodada que queremos simular
     let runs = [1_000, 5_000, 10_000, 15_000, 20_000];
 
+    // Rodando o simulador para todas as combinação de fase transiente e fregueses por rodada
     for &transient_phase in &runs {
         for &round_size in &runs {
             timing(0.2, transient_phase, round_size, QueuePolicy::FCFS);

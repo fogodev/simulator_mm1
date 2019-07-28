@@ -1,9 +1,11 @@
+// Struct para acumular os valores e tempos de um processo estocástico
 pub struct StochasticProcessSample {
     arrivals_times: Vec<f64>,
     values: Vec<usize>,
 }
 
 impl StochasticProcessSample {
+    // Instancia um novo objeto, já tendo uma ideia aproximada de quantos valores serão recebidos
     pub fn new(capacity: usize) -> Self {
         Self {
             arrivals_times: Vec::with_capacity(capacity),
@@ -11,11 +13,13 @@ impl StochasticProcessSample {
         }
     }
 
+    // Adiciona novos valores e tempos nos nossos vetores
     pub fn append(&mut self, time: f64, value: usize) {
         self.arrivals_times.push(time);
         self.values.push(value);
     }
 
+    // Calcula o estimador da média
     pub fn mean(&self) -> f64 {
         let sample_count = self.values.len();
         if sample_count > 0 {
@@ -30,6 +34,7 @@ impl StochasticProcessSample {
         }
     }
 
+    // Calcula o estimador da variância
     pub fn variance(&self) -> f64 {
         let sample_count = self.values.len();
         if sample_count > 0 {
