@@ -41,12 +41,12 @@ pub struct Queue {
     // Acumulador de amostras de processos estocásticos
     stochastic_process_samples: HashMap<String, StochasticProcessSample>,
     queue_policy: QueuePolicy, // Política de atendimento
-    lambda: f64, // Lambda da fila
-    queue: VecDeque<Client>, // Estrutura que vai representar os clientes na fila
+    lambda: f64,               // Lambda da fila
+    queue: VecDeque<Client>,   // Estrutura que vai representar os clientes na fila
     // Cliente em atendimento no momento, caso haja algum cliente para ser atendido
     client_in_service: Option<Client>,
-    past_events: Vec<Event>, // Eventos que ocorreram
-    current_time: f64, // Tempo atual da fila
+    past_events: Vec<Event>,                     // Eventos que ocorreram
+    current_time: f64,                           // Tempo atual da fila
     exponential_time_generator: ExponentialTime, // Gerador de amostras exponenciais
 }
 
@@ -57,7 +57,8 @@ impl Queue {
         let mut exponential_time_generator = ExponentialTime::new(seed);
         // Calcula quando será o primeiro evento de chegada
         let first_arrival_time = exponential_time_generator.get(lambda);
-        let mut queue = Self { // Instancia a fila
+        let mut queue = Self {
+            // Instancia a fila
             samples: HashMap::new(),
             stochastic_process_samples: HashMap::new(),
             queue_policy,
@@ -178,7 +179,8 @@ impl Queue {
 
     // Processa um evento de fim de atendimento de um freguês
     fn end_of_service_event(&mut self) {
-        if self.client_in_service.is_some() { // Verifica se há algum freguês sendo atendido
+        if self.client_in_service.is_some() {
+            // Verifica se há algum freguês sendo atendido
             // Retira esse freguês do atendimento para coletarmos suas métricas
             let mut current_wrapped_client = None;
             swap(&mut current_wrapped_client, &mut self.client_in_service);
@@ -187,16 +189,18 @@ impl Queue {
             current_client.register_end(X, self.current_time);
             // Coleta as métricas W, X e T desse freguês
             self.register_client_queue_and_server_times(&current_client);
-            if !self.queue.is_empty() { // Caso a fila não esteja vazia
+            if !self.queue.is_empty() {
+                // Caso a fila não esteja vazia
                 let mut next_client = self.get_next_client(); // Seleciona o próximo freguês
-                // Finalizamos seu tempo de espera
+                                                              // Finalizamos seu tempo de espera
                 next_client.register_end(W, self.current_time);
                 // Inicializamos seu tempo de atendimento
                 next_client.register_start(X, self.current_time);
                 // Registramos o evento de fim de serviço desse freguês
                 self.add_event(END_OF_SERVICE, next_client.x());
                 self.client_in_service = Some(next_client); // Colocamos esse freguês em atendimento
-            } else { // Caso a fila esteja vazia, não há cliente para ficar em serviço
+            } else {
+                // Caso a fila esteja vazia, não há cliente para ficar em serviço
                 self.client_in_service = None;
             }
             self.register_current_state_values(); // Registra o estado atual da fila
@@ -215,12 +219,15 @@ impl Queue {
         self.initialize_sample_collectors(client_count);
         self.register_current_state_values(); // Registra o estado atual da fila
         let mut client = 0;
-        while client < client_count { // Enquanto não processarmos todos os clientes pedidos
+        while client < client_count {
+            // Enquanto não processarmos todos os clientes pedidos
             let event = self.get_next_event(); // Pegamos o próximo evento
             self.current_time = event.timestamp; // Atualizamos o tempo atual da fila
-            if CLIENT_ARRIVAL == event.name { // Caso seja evento de chegada de freguês
+            if CLIENT_ARRIVAL == event.name {
+                // Caso seja evento de chegada de freguês
                 self.handle_arrival_event(); // Processamos a chegada
-            } else if END_OF_SERVICE == event.name { // Caso seja evento de fim de serviço
+            } else if END_OF_SERVICE == event.name {
+                // Caso seja evento de fim de serviço
                 self.end_of_service_event(); // Processamos a saída
                 client += 1; // Contabilizamos o cliente satisfeito nessa rodada
             } else {

@@ -20,6 +20,14 @@ pub fn timing(rho: f64, transient_phase: usize, round_size: usize, queue_policy:
 }
 
 fn main() {
+    // Pequenos rhos, para constatar a corretude do simulador
+    let smaller_rhos = [0.1, 0.01, 0.001, 0.0001];
+
+    for &small_rho in &smaller_rhos {
+        timing(small_rho, 10_000, 20_000, QueuePolicy::FCFS);
+        timing(small_rho, 10_000, 20_000, QueuePolicy::LCFS);
+    }
+
     // Tamanhos de fase transiente e quantidade de fregueses por rodada que queremos simular
     let runs = [1_000, 5_000, 10_000, 15_000, 20_000];
 

@@ -42,12 +42,12 @@ fn statistics_hash_map(rounds_count: usize) -> BTreeMap<String, Sample> {
 
 // Função que executa o simulador
 pub fn simulator(
-    rho: f64, // Taxa de utilização do sistema
+    rho: f64,                    // Taxa de utilização do sistema
     transient_phase_size: usize, // Tamanho da fase transiente
-    round_size: usize, // Quantidade de fregueses por rodada
-    rounds_count: usize, // Quantidade de rodadas
-    queue_policy: QueuePolicy, // Política de atendimento FCFS ou LCFS
-    seed: u64, // Semente a ser utilizada pelo gerador de amostras exponenciais
+    round_size: usize,           // Quantidade de fregueses por rodada
+    rounds_count: usize,         // Quantidade de rodadas
+    queue_policy: QueuePolicy,   // Política de atendimento FCFS ou LCFS
+    seed: u64,                   // Semente a ser utilizada pelo gerador de amostras exponenciais
 ) {
     // Árvore B para coletar médias amostrais de N, T e X por rodada
     let mut means_statistics = statistics_hash_map(rounds_count);
@@ -79,7 +79,7 @@ pub fn simulator(
     // For que executa as rodadas da simulação
     for _ in 0..rounds_count {
         progress_bar.inc(1); // Incremento da barra de progresso
-        // Executa uma rodada da simulação, retornando
+                             // Executa uma rodada da simulação, retornando
         let (samples, stochastic_process_samples) = queue.run_one_simulation_round(round_size);
         // Coleta as médias e variâncias amostrais de W, X e T
         for (name, sample) in samples {
@@ -153,7 +153,7 @@ pub fn simulator(
         mean_and_ic_w[1],
         mean_and_ic_w[2],
         mean_and_ic_w[3],
-        100.0 - mean_and_ic_w[4],
+        100.0 - mean_and_ic_w[4] * 100.0,
     );
 
     // Item b) do relatório
@@ -171,11 +171,11 @@ pub fn simulator(
         variance_and_ic_t_student_chi_square_w[1],
         variance_and_ic_t_student_chi_square_w[2],
         variance_and_ic_t_student_chi_square_w[3],
-        100.0 - variance_and_ic_t_student_chi_square_w[4],
+        100.0 - variance_and_ic_t_student_chi_square_w[4] * 100.0,
         variance_and_ic_t_student_chi_square_w[5],
         variance_and_ic_t_student_chi_square_w[6],
         variance_and_ic_t_student_chi_square_w[7],
-        100.0 - variance_and_ic_t_student_chi_square_w[8],
+        100.0 - variance_and_ic_t_student_chi_square_w[8] * 100.0,
     );
 
     // Item c) do relatório
@@ -188,7 +188,7 @@ pub fn simulator(
         mean_and_ic_nq[1],
         mean_and_ic_nq[2],
         mean_and_ic_nq[3],
-        mean_and_ic_nq[4],
+        100.0 - mean_and_ic_nq[4] * 100.0,
     );
 
     // Item d) do relatório
@@ -206,11 +206,11 @@ pub fn simulator(
         variance_and_ic_t_student_chi_square_nq[1],
         variance_and_ic_t_student_chi_square_nq[2],
         variance_and_ic_t_student_chi_square_nq[3],
-        100.0 - variance_and_ic_t_student_chi_square_nq[4],
+        100.0 - variance_and_ic_t_student_chi_square_nq[4] * 100.0,
         variance_and_ic_t_student_chi_square_nq[5],
         variance_and_ic_t_student_chi_square_nq[6],
         variance_and_ic_t_student_chi_square_nq[7],
-        100.0 - variance_and_ic_t_student_chi_square_nq[8],
+        100.0 - variance_and_ic_t_student_chi_square_nq[8] * 100.0,
     );
 
     // Escreve os dados num arquivo .csv
