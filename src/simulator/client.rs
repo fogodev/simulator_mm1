@@ -6,21 +6,28 @@ pub struct Client {
     x: f64,
     start_event: HashMap<String, f64>,
     end_event: HashMap<String, f64>,
+    color: usize,
 }
 
 impl Client {
     // Instancia um novo freguês, com o tempo de atendimento e HashMaps de eventos
-    pub fn new(x: f64) -> Self {
+    pub fn new(x: f64, color: usize) -> Self {
         Self {
             x,
             start_event: HashMap::new(),
             end_event: HashMap::new(),
+            color,
         }
     }
 
     // Getter do tempo de atendimento
     pub fn x(&self) -> f64 {
         self.x
+    }
+
+    // Getter da cor desse cliente
+    pub fn color(&self) -> usize {
+        self.color
     }
 
     // Registra o começo de um novo evento, tal como entrada em atendimento ou na fila de espera

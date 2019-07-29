@@ -15,6 +15,11 @@ pub fn write_csv_file(
     variance_and_ic_t_student_chi_square_w: &[f64; 9],
     mean_and_ic_nq: &[f64; 5],
     variance_and_ic_t_student_chi_square_nq: &[f64; 9],
+    analytic_mean_w: f64,
+    analytic_variance_w: f64,
+    analytic_mean_nq: f64,
+    analytic_variance_nq: f64,
+    elapsed_time: f64,
 ) {
     let csv_file_path = Path::new("output.csv"); // Path do arquivo csv
     let mut file = if csv_file_path.exists() {
@@ -35,6 +40,7 @@ pub fn write_csv_file(
                 "rho",
                 "fregueses",
                 "fase_transiente",
+                "policy",
                 "E[N]",
                 "E[T]",
                 "E[X]",
@@ -69,7 +75,11 @@ pub fn write_csv_file(
                 "V(Nq)_IC_C2_C",
                 "V(Nq)_IC_C2_U",
                 "V(Nq)_IC_C2_P",
-                "policy\n",
+                "E[W]_analytic",
+                "V(W)_analytic",
+                "E[Nq]_analytic",
+                "V(Nq)_analytic",
+                "elapsed_time(s)\n",
             ]
             .join(",")
             .as_bytes(),
@@ -79,7 +89,7 @@ pub fn write_csv_file(
     };
 
     // Adicionamos os dados nas linhas do csv
-    let mut output_string = format!("{},{},{},", rho, clients, transient_phase);
+    let mut output_string = format!("{},{},{},{:?}", rho, clients, transient_phase, policy);
     for num in means_n_t_x
         .iter()
         .chain(variances_n_t_x.iter())
@@ -90,7 +100,10 @@ pub fn write_csv_file(
     {
         output_string += &format!("{},", num);
     }
-    output_string += &format!("{:?}\n", policy);
+    output_string += &format!(
+        "{},{},{},{},{}\n",
+        analytic_mean_w, analytic_variance_w, analytic_mean_nq, analytic_variance_nq, elapsed_time
+    );
 
     file.write_all(output_string.as_bytes())
         .expect("Failed to write csv file");

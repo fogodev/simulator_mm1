@@ -33,7 +33,7 @@ impl ConfidenceInterval {
     pub fn precision(&self) -> f64 {
         self.precision
     }
-    // Verifica a a convergência entre dois intervalos de confiança
+    // Verifica a convergência entre dois intervalos de confiança
     pub fn check_convergence(first: Self, second: Self) -> bool {
         first.lower_bound < second.center
             && first.upper_bound > second.center

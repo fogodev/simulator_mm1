@@ -13,8 +13,8 @@ mod statistics_output_files;
 
 // Biblioteca externa que renderiza uma progress bar no terminal conforme as rodadas acontecem
 use indicatif::{ProgressBar, ProgressStyle};
-// Estrutura de dados Árvore B da biblioteca padrão do Rust
-use std::collections::BTreeMap;
+// Estrutura de dados HashMap da biblioteca padrão do Rust
+use std::collections::HashMap;
 
 // Importando a representação do nosso intervalo de confiança
 use confidence_interval::ConfidenceInterval;
@@ -27,13 +27,11 @@ use statistics_output_files::write_csv_file;
 
 // Exportando o enum da nossa política de fila, pra ser usado por quem chamar o simulador
 pub(crate) use queue::QueuePolicy;
+use std::time::Instant;
 
-// Função interna que constrói uma Árvore B para coleta de amostras das métricas N, T e X
-// Usamos Árvore B por questão de ordenação dos elementos, na hora de exibir os dados
-// por termos poucos pares chave valor, a perda de desempenho é imperceptível em relação a
-// um HashMap
-fn statistics_hash_map(rounds_count: usize) -> BTreeMap<String, Sample> {
-    let mut statistics = BTreeMap::new();
+// Função interna que constrói um HashMap para coleta de amostras das métricas N, T e X
+fn statistics_hash_map(rounds_count: usize) -> HashMap<String, Sample> {
+    let mut statistics = HashMap::new();
     statistics.insert(N.to_string(), Sample::new(rounds_count));
     statistics.insert(T.to_string(), Sample::new(rounds_count));
     statistics.insert(X.to_string(), Sample::new(rounds_count));
@@ -42,16 +40,17 @@ fn statistics_hash_map(rounds_count: usize) -> BTreeMap<String, Sample> {
 
 // Função que executa o simulador
 pub fn simulator(
-    rho: f64,                    // Taxa de utilização do sistema
-    transient_phase_size: usize, // Tamanho da fase transiente
-    round_size: usize,           // Quantidade de fregueses por rodada
-    rounds_count: usize,         // Quantidade de rodadas
-    queue_policy: QueuePolicy,   // Política de atendimento FCFS ou LCFS
-    seed: u64,                   // Semente a ser utilizada pelo gerador de amostras exponenciais
+    rho: f64,                  // Taxa de utilização do sistema
+    round_size: usize,         // Quantidade de fregueses por rodada
+    rounds_count: usize,       // Quantidade de rodadas
+    queue_policy: QueuePolicy, // Política de atendimento FCFS ou LCFS
+    seed: u64,                 // Semente a ser utilizada pelo gerador de amostras exponenciais
 ) {
-    // Árvore B para coletar médias amostrais de N, T e X por rodada
+    let now = Instant::now();
+
+    // HashMap para coletar médias amostrais de N, T e X por rodada
     let mut means_statistics = statistics_hash_map(rounds_count);
-    // Árvore B para coletar variâncias amostrais de N, T e X por rodada
+    // HashMap para coletar variâncias amostrais de N, T e X por rodada
     let mut variances_statistics = statistics_hash_map(rounds_count);
 
     // Acumulador de médias amostrais de W
@@ -67,7 +66,11 @@ pub fn simulator(
     let mut queue = Queue::new(rho, queue_policy, seed);
 
     // Executando a fase transiente
-    queue.run_one_simulation_round(transient_phase_size);
+    let transient_phase_size = queue.transient_phase();
+    println!(
+        "\nTotal de fregueses = {}; Política = {:?}; ρ = {}; Tamanho da fase transiente = {}\n",
+        round_size, queue_policy, rho, transient_phase_size
+    );
 
     // Instanciando a barra de progresso que informa o andamento das rodadas de simulação
     let progress_bar = ProgressBar::new(rounds_count as u64);
@@ -116,11 +119,6 @@ pub fn simulator(
     }
     progress_bar.finish_with_message("Finalizado"); // Finaliza a barra de progresso
 
-    println!(
-        "\nTotal de fregueses {} com política {:?} e ρ = {}\n",
-        round_size, queue_policy, rho
-    );
-
     // Média das médias amostrais de cada rodada de N, T e X
     let means_n_t_x = [
         means_statistics["N"].mean(),
@@ -147,13 +145,13 @@ pub fn simulator(
     let mean_w_ci = w_mean_statistics.t_student_95percent();
     let mean_and_ic_w = extract_statistics_and_ci_slice(w_mean_statistics.mean(), &mean_w_ci);
     println!(
-        "Sample Mean and Confidence Interval:\n\tE[W] = {:0.5}\n\t\tIC T-Student:\tL(0.05) = {:0.5};\
+        "Sample Mean and Confidence Interval:\n\tE[W]  = {:0.5}\n\t\tIC T-Student:\tL(0.05) = {:0.5};\
          \tCenter = {:0.5}; \tU(0.05) = {:0.5}; \tPrecision = {:0.5}%",
         mean_and_ic_w[0],
         mean_and_ic_w[1],
         mean_and_ic_w[2],
         mean_and_ic_w[3],
-        100.0 - mean_and_ic_w[4] * 100.0,
+        100.0 * mean_and_ic_w[4],
     );
 
     // Item b) do relatório
@@ -163,7 +161,7 @@ pub fn simulator(
     let variance_and_ic_t_student_chi_square_w =
         extract_statistics_and_2cis_slice(w_variance, &ts_ci_w, &c2_ci_w);
     println!(
-        "Sample Variance and Confidence Interval:\n\tV(W) = {:0.5}\n\t\tIC T-Student:\
+        "Sample Variance and Confidence Interval:\n\tV(W)  = {:0.5}\n\t\tIC T-Student:\
          \tL(0.05) = {:0.5};\tCenter = {:0.5};\tU(0.05) = {:0.5};\tPrecision = {:0.5}%\
          \n\t\tIC Chi-Square:\tL(0.05) = {:0.5};\tCenter = {:0.5};\tU(0.05) = {:0.5};\
          \tPrecision = {:0.5}%",
@@ -171,11 +169,11 @@ pub fn simulator(
         variance_and_ic_t_student_chi_square_w[1],
         variance_and_ic_t_student_chi_square_w[2],
         variance_and_ic_t_student_chi_square_w[3],
-        100.0 - variance_and_ic_t_student_chi_square_w[4] * 100.0,
+        100.0 * variance_and_ic_t_student_chi_square_w[4],
         variance_and_ic_t_student_chi_square_w[5],
         variance_and_ic_t_student_chi_square_w[6],
         variance_and_ic_t_student_chi_square_w[7],
-        100.0 - variance_and_ic_t_student_chi_square_w[8] * 100.0,
+        100.0 * variance_and_ic_t_student_chi_square_w[8],
     );
 
     // Item c) do relatório
@@ -188,7 +186,7 @@ pub fn simulator(
         mean_and_ic_nq[1],
         mean_and_ic_nq[2],
         mean_and_ic_nq[3],
-        100.0 - mean_and_ic_nq[4] * 100.0,
+        100.0 * mean_and_ic_nq[4],
     );
 
     // Item d) do relatório
@@ -206,11 +204,24 @@ pub fn simulator(
         variance_and_ic_t_student_chi_square_nq[1],
         variance_and_ic_t_student_chi_square_nq[2],
         variance_and_ic_t_student_chi_square_nq[3],
-        100.0 - variance_and_ic_t_student_chi_square_nq[4] * 100.0,
+        100.0 * variance_and_ic_t_student_chi_square_nq[4],
         variance_and_ic_t_student_chi_square_nq[5],
         variance_and_ic_t_student_chi_square_nq[6],
         variance_and_ic_t_student_chi_square_nq[7],
-        100.0 - variance_and_ic_t_student_chi_square_nq[8] * 100.0,
+        100.0 * variance_and_ic_t_student_chi_square_nq[8],
+    );
+
+    // Calculando valores analíticos para E[W], V(W), E[Nq], V(Nq)
+    let analytic_mean_w = rho / (1.0 - rho);
+    let analytic_variance_w = match queue_policy {
+        QueuePolicy::FCFS => (2.0 * rho - rho.powi(2)) / ((1.0 - rho) * (1.0 - rho)),
+        QueuePolicy::LCFS => (2.0 * rho - rho.powi(2) + rho.powi(3)) / ((1.0 - rho).powi(3)),
+    };
+    let analytic_mean_nq = rho.powi(2) / (1.0 - rho);
+    let analytic_variance_nq = (rho.powi(2) + rho.powi(3) - rho.powi(4)) / (1.0 - rho).powi(2);
+    println!(
+        "Analytics values:\n\tE[W]  = {:0.5}\tV(W) = {:0.5}\n\tE[Nq] = {:0.5}\tV(Nq) = {:0.5}",
+        analytic_mean_w, analytic_variance_w, analytic_mean_nq, analytic_variance_nq
     );
 
     // Escreve os dados num arquivo .csv
@@ -225,6 +236,11 @@ pub fn simulator(
         &variance_and_ic_t_student_chi_square_w,
         &mean_and_ic_nq,
         &variance_and_ic_t_student_chi_square_nq,
+        analytic_mean_w,
+        analytic_variance_w,
+        analytic_mean_nq,
+        analytic_variance_nq,
+        now.elapsed().as_millis() as f64 / 1000.0,
     );
 
     // Caso não tenhamos precisão suficiente, executamos de novo para mais fregueses
@@ -232,17 +248,21 @@ pub fn simulator(
         println!(
             "Precisão do IC de E[W] = {:0.5}% não é suficiente\
              \nRodando agora para {} clientes",
-            100.0 - mean_w_ci.precision(),
+            100.0 * mean_w_ci.precision(),
             round_size + 100
         );
-        return simulator(
-            rho,
-            transient_phase_size,
-            round_size + 100,
-            rounds_count,
-            queue_policy,
-            seed,
+        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
+    }
+
+    // Caso não tenhamos precisão suficiente, executamos de novo para mais fregueses
+    if ts_ci_w.precision() > 0.05 {
+        println!(
+            "Precisão do IC pela T-Student de V(W) = {:0.5}% não é suficiente\
+             \nRodando agora para {} clientes",
+            100.0 * ts_ci_w.precision(),
+            round_size + 100
         );
+        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
     }
 
     // Caso não tenhamos precisão suficiente, executamos de novo para mais fregueses
@@ -250,17 +270,21 @@ pub fn simulator(
         println!(
             "Precisão do IC de E[Nq] = {:0.5}% não é suficiente\
              \nRodando agora para {} clientes",
-            100.0 - mean_nq_ci.precision(),
+            100.0 * mean_nq_ci.precision(),
             round_size + 100
         );
-        return simulator(
-            rho,
-            transient_phase_size,
-            round_size + 100,
-            rounds_count,
-            queue_policy,
-            seed,
+        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
+    }
+
+    // Caso não tenhamos precisão suficiente, executamos de novo para mais fregueses
+    if ts_ci_nq.precision() > 0.05 {
+        println!(
+            "Precisão do IC pela T-Student de V(Nq) = {:0.5}% não é suficiente\
+             \nRodando agora para {} clientes",
+            100.0 * ts_ci_nq.precision(),
+            round_size + 100
         );
+        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
     }
 
     // Caso não tenhamos convergência dos ICs, executamos de novo para mais fregueses
@@ -270,14 +294,7 @@ pub fn simulator(
              \nRodando agora para {} clientes\n",
             round_size + 100
         );
-        return simulator(
-            rho,
-            transient_phase_size,
-            round_size + 100,
-            rounds_count,
-            queue_policy,
-            seed,
-        );
+        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
     }
 
     // Caso não tenhamos convergência dos ICs, executamos de novo para mais fregueses
@@ -287,14 +304,7 @@ pub fn simulator(
              \nRodando agora para {} clientes\n",
             round_size + 100
         );
-        return simulator(
-            rho,
-            transient_phase_size,
-            round_size + 100,
-            rounds_count,
-            queue_policy,
-            seed,
-        );
+        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
     }
 }
 

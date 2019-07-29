@@ -14,8 +14,13 @@ impl ExponentialTime {
         }
     }
 
-    // Calcula uma amostra exponencial a partir de um número aleatório entre [0, 1) gerado
+    // Calcula uma amostra exponencial a partir de um número aleatório entre (0, 1) gerado
     pub fn get(&mut self, lambda: f64) -> f64 {
-        -1.0 * (1.0 / lambda) * (self.random_number_generator.gen_range(0.0f64, 1.0f64)).ln()
+        // Usando o menor float positivo para garantir que não teremos ln(0)
+        -self
+            .random_number_generator
+            .gen_range(std::f64::MIN_POSITIVE, 1.0f64)
+            .ln()
+            / lambda
     }
 }
