@@ -9,7 +9,8 @@ use std::collections::{HashMap, VecDeque};
 // Troca dois valores de lugar na memória, utilizado para lidar com o Borrow Checker do Rust
 use std::mem::swap;
 
-// Struct para representar um evento, que possui um nome e um tempo de quando aconteceu
+// Struct para representar um evento, que possui um nome,
+// um momento de quando ele aconteceu e sua duração
 struct Event {
     name: String,
     birth_time: f64,
@@ -202,8 +203,9 @@ impl Queue {
             }
             if !self.queue.is_empty() {
                 // Caso a fila não esteja vazia
-                let mut next_client = self.get_next_client(); // Seleciona o próximo freguês
-                                                              // Finalizamos seu tempo de espera
+                // Seleciona o próximo freguês
+                let mut next_client = self.get_next_client();
+                // Finalizamos seu tempo de espera
                 next_client.register_end(W, self.current_time);
                 // Inicializamos seu tempo de atendimento
                 next_client.register_start(X, self.current_time);
@@ -219,15 +221,21 @@ impl Queue {
     }
 
     pub fn transient_phase(&mut self) -> usize {
+        // Coletores de métricas com um valor qualquer, essas métricas serão descartadas
         self.initialize_sample_collectors(5000);
+        // Contabilizamos o período ocupado
         let mut busy_time = 0.0;
+        // Contabilizamos o tamanho da fase transiente
         let mut transient_phase_counter = 0;
         loop {
+            // Acumulamos os períodos ocupados
             busy_time += self.handle_transient_phase_events();
-            transient_phase_counter += 1;
+            transient_phase_counter += 1; // Incrementamos o tamanho atual da fase transiente
+                                          // Calculamos um rho simulado, que é taxa atual de utilização da fila
             let simulated_rho = busy_time / self.current_time;
-            //            println!("Busy time = {};\t\tTotal time = {};\t\t\tSimulated rho = {}", busy_time, self.current_time, simulated_rho);
             if (simulated_rho - self.lambda).abs() < 0.01 {
+                // Se o rho da simulação estiver razoavelmente próximo do rho pedido, podemos sair
+                // da fase transiente
                 break transient_phase_counter;
             }
         }
@@ -236,6 +244,7 @@ impl Queue {
     fn handle_transient_phase_events(&mut self) -> f64 {
         // Selecionamos o próximo evento
         let event = self.get_next_event();
+        // Aqui vemos se o evento atual está ocorrendo ou não durante um período ocupado
         let new_busy_time = if !self.queue.is_empty() || self.client_in_service.is_some() {
             event.duration
         } else {
