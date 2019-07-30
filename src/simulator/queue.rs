@@ -74,7 +74,7 @@ impl Queue {
             color: 0,
         };
         // Adiciona o evento da primeira chegada
-        queue.add_event(CLIENT_ARRIVAL, 0.0, first_event_duration);
+        queue.add_event(CLIENT_ARRIVAL, first_event_duration);
         queue // Retorna a fila instanciada
     }
 
@@ -121,10 +121,11 @@ impl Queue {
     }
 
     // Adiciona um novo evento na lista de eventos ocorridos
-    fn add_event(&mut self, name: &str, birth_time: f64, duration: f64) {
+    fn add_event(&mut self, name: &str, duration: f64) {
+        let current_time = self.current_time;
         self.past_events.push(Event {
             name: name.to_string(),
-            birth_time,
+            birth_time: current_time,
             duration,
         })
     }
@@ -161,11 +162,7 @@ impl Queue {
         // Calcula o evento da próxima chegada
         let next_client_arrival_duration = self.exponential_time_generator.get(self.lambda);
         // Adiciona o evento da próxima chegada na lista de eventos
-        self.add_event(
-            CLIENT_ARRIVAL,
-            self.current_time,
-            next_client_arrival_duration,
-        );
+        self.add_event(CLIENT_ARRIVAL, next_client_arrival_duration);
         // Instancia um novo freguês para entrar na fila ou ser atendido
         let mut client = Client::new(self.exponential_time_generator.get(1.0), self.color);
         // Marca o inicio da espera desse freguês
@@ -178,7 +175,7 @@ impl Queue {
             // Inicializa o período do atendimento desse freguês
             client.register_start(X, self.current_time);
             // Adiciona o evento do fim de serviço desse freguês de acordo com seu X
-            self.add_event(END_OF_SERVICE, self.current_time, client.x());
+            self.add_event(END_OF_SERVICE, client.x());
             self.client_in_service = Some(client); // Colocamos esse freguês em atendimento
         } else {
             // Caso haja alguém na fila ou alguém sendo atendido, freguês vai pra fila de espera
@@ -210,31 +207,43 @@ impl Queue {
                 // Inicializamos seu tempo de atendimento
                 next_client.register_start(X, self.current_time);
                 // Registramos o evento de fim de serviço desse freguês
-                self.add_event(END_OF_SERVICE, self.current_time, next_client.x());
+                self.add_event(END_OF_SERVICE, next_client.x());
                 self.client_in_service = Some(next_client); // Colocamos esse freguês em atendimento
             } else {
                 // Caso a fila esteja vazia, não há cliente para ficar em serviço
                 self.client_in_service = None;
             }
-            self.register_current_state_values(); // Registra o estado atual da fila
         }
+        self.register_current_state_values(); // Registra o estado atual da fila
     }
 
     pub fn transient_phase(&mut self) -> usize {
         // Coletores de métricas com um valor qualquer, essas métricas serão descartadas
         self.initialize_sample_collectors(5000);
+        self.register_current_state_values();
         // Contabilizamos o período ocupado
         let mut busy_time = 0.0;
         // Contabilizamos o tamanho da fase transiente
         let mut transient_phase_counter = 0;
+        let mut stable_queue_counter = 0usize;
         loop {
             // Acumulamos os períodos ocupados
             busy_time += self.handle_transient_phase_events();
-            transient_phase_counter += 1; // Incrementamos o tamanho atual da fase transiente
-                                          // Calculamos um rho simulado, que é taxa atual de utilização da fila
+            // Incrementamos o tamanho atual da fase transiente
+            transient_phase_counter += 1;
+            // Calculamos um rho simulado, que é taxa atual de utilização da fila
             let simulated_rho = busy_time / self.current_time;
-            if (simulated_rho - self.lambda).abs() < 0.01 {
-                // Se o rho da simulação estiver razoavelmente próximo do rho pedido, podemos sair
+            if 1.0 - f64::min(simulated_rho, self.lambda) / f64::max(simulated_rho, self.lambda)
+                <= 0.01
+            {
+                // Se o rho da simulação estiver razoavelmente próximo do rho contabilizamos
+                stable_queue_counter += 1;
+            } else {
+                // Se não estiver próximo o suficiente, resetamos a contagem para zero
+                stable_queue_counter = 0;
+            }
+            if stable_queue_counter == 500 {
+                // Se atingimos 500 iterações sequenciais com estabilidade, então podemos sair
                 // da fase transiente
                 break transient_phase_counter;
             }
@@ -246,11 +255,11 @@ impl Queue {
         let event = self.get_next_event();
         // Aqui vemos se o evento atual está ocorrendo ou não durante um período ocupado
         let new_busy_time = if !self.queue.is_empty() || self.client_in_service.is_some() {
-            event.duration
+            event.birth_time + event.duration - self.current_time
         } else {
             0.0
         };
-        self.current_time += event.duration; // Atualizamos o tempo atual da fila
+        self.current_time = event.birth_time + event.duration; // Atualizamos o tempo atual da fila
 
         if CLIENT_ARRIVAL == event.name {
             // Caso seja evento de chegada de freguês
@@ -281,7 +290,7 @@ impl Queue {
         while client < client_count {
             // Enquanto não processarmos todos os clientes pedidos
             let event = self.get_next_event(); // Pegamos o próximo evento
-            self.current_time += event.duration; // Atualizamos o tempo atual da fila
+            self.current_time = event.birth_time + event.duration; // Atualizamos o tempo atual da fila
             if CLIENT_ARRIVAL == event.name {
                 // Caso seja evento de chegada de freguês
                 self.handle_arrival_event(); // Processamos a chegada

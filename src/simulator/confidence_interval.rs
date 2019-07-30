@@ -35,9 +35,19 @@ impl ConfidenceInterval {
     }
     // Verifica a convergência entre dois intervalos de confiança
     pub fn check_convergence(first: Self, second: Self) -> bool {
-        first.lower_bound < second.center
-            && first.upper_bound > second.center
-            && second.lower_bound < first.center
-            && second.upper_bound > first.center
+        first.lower_bound <= second.center
+            && first.upper_bound >= second.center
+            && second.lower_bound <= first.center
+            && second.upper_bound >= first.center
+    }
+
+    pub fn value_is_inside(&self, value: f64) -> bool {
+        // Verificamos se o valor passado está dentro dos limites inferior e superior
+        // ou então bastante próximo desses limites, devido a possíveis erros numéricos de float
+        (self.lower_bound <= value
+            || 1.0 - f64::min(self.lower_bound, value) / f64::max(self.lower_bound, value) <= 0.01)
+            && (value <= self.upper_bound
+                || 1.0 - f64::min(self.upper_bound, value) / f64::max(self.upper_bound, value)
+                    <= 0.01)
     }
 }

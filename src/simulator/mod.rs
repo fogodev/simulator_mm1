@@ -15,6 +15,8 @@ mod statistics_output_files;
 use indicatif::{ProgressBar, ProgressStyle};
 // Estrutura de dados HashMap da biblioteca padrão do Rust
 use std::collections::HashMap;
+// Funcionalidade de temporização da biblioteca padrão
+use std::time::{Instant, SystemTime};
 
 // Importando a representação do nosso intervalo de confiança
 use confidence_interval::ConfidenceInterval;
@@ -27,7 +29,6 @@ use statistics_output_files::write_csv_file;
 
 // Exportando o enum da nossa política de fila, pra ser usado por quem chamar o simulador
 pub(crate) use queue::QueuePolicy;
-use std::time::Instant;
 
 // Função interna que constrói um HashMap para coleta de amostras das métricas N, T e X
 fn statistics_hash_map(rounds_count: usize) -> HashMap<String, Sample> {
@@ -44,8 +45,13 @@ pub fn simulator(
     round_size: usize,         // Quantidade de fregueses por rodada
     rounds_count: usize,       // Quantidade de rodadas
     queue_policy: QueuePolicy, // Política de atendimento FCFS ou LCFS
-    seed: u64,                 // Semente a ser utilizada pelo gerador de amostras exponenciais
 ) {
+    // Semente a ser utilizada pelo gerador de amostras exponenciais
+    let seed = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("Erro ao obter o tempo do sistema")
+        .as_secs();
+
     let now = Instant::now();
 
     // HashMap para coletar médias amostrais de N, T e X por rodada
@@ -220,7 +226,7 @@ pub fn simulator(
     let analytic_mean_nq = rho.powi(2) / (1.0 - rho);
     let analytic_variance_nq = (rho.powi(2) + rho.powi(3) - rho.powi(4)) / (1.0 - rho).powi(2);
     println!(
-        "Analytics values:\n\tE[W]  = {:0.5}\tV(W) = {:0.5}\n\tE[Nq] = {:0.5}\tV(Nq) = {:0.5}",
+        "Analytical values:\n\tE[W]  = {:0.5}\n\tV(W)  = {:0.5}\n\tE[Nq] = {:0.5}\n\tV(Nq) = {:0.5}",
         analytic_mean_w, analytic_variance_w, analytic_mean_nq, analytic_variance_nq
     );
 
@@ -243,68 +249,85 @@ pub fn simulator(
         now.elapsed().as_millis() as f64 / 1000.0,
     );
 
+    let mut not_enough = false;
+
+    if !mean_w_ci.value_is_inside(analytic_mean_w) {
+        println!("O valor analítico de E[W] não está dentro do IC como esperado");
+        not_enough = true;
+    }
+
+    if !(ts_ci_w.value_is_inside(analytic_variance_w)
+        && c2_ci_w.value_is_inside(analytic_variance_w))
+    {
+        println!("O valor analítico de V(W) não está dentro do IC como esperado");
+        not_enough = true;
+    }
+
+    if !mean_nq_ci.value_is_inside(analytic_mean_nq) {
+        println!("O valor analítico de E[Nq] não está dentro do IC como esperado");
+        not_enough = true;
+    }
+
+    if !(ts_ci_nq.value_is_inside(analytic_variance_nq)
+        && c2_ci_nq.value_is_inside(analytic_variance_nq))
+    {
+        println!("O valor analítico de V(Nq) não está dentro do IC como esperado");
+        not_enough = true;
+    }
+
     // Caso não tenhamos precisão suficiente, executamos de novo para mais fregueses
     if mean_w_ci.precision() > 0.05 {
         println!(
-            "Precisão do IC de E[W] = {:0.5}% não é suficiente\
-             \nRodando agora para {} clientes",
+            "Precisão do IC de E[W] = {:0.5}% não é suficiente",
             100.0 * mean_w_ci.precision(),
-            round_size + 100
         );
-        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
+        not_enough = true;
     }
 
     // Caso não tenhamos precisão suficiente, executamos de novo para mais fregueses
     if ts_ci_w.precision() > 0.05 {
         println!(
-            "Precisão do IC pela T-Student de V(W) = {:0.5}% não é suficiente\
-             \nRodando agora para {} clientes",
+            "Precisão do IC pela T-Student de V(W) = {:0.5}% não é suficiente",
             100.0 * ts_ci_w.precision(),
-            round_size + 100
         );
-        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
+        not_enough = true;
     }
 
     // Caso não tenhamos precisão suficiente, executamos de novo para mais fregueses
     if mean_nq_ci.precision() > 0.05 {
         println!(
-            "Precisão do IC de E[Nq] = {:0.5}% não é suficiente\
-             \nRodando agora para {} clientes",
+            "Precisão do IC de E[Nq] = {:0.5}% não é suficiente",
             100.0 * mean_nq_ci.precision(),
-            round_size + 100
         );
-        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
+        not_enough = true;
     }
 
     // Caso não tenhamos precisão suficiente, executamos de novo para mais fregueses
     if ts_ci_nq.precision() > 0.05 {
         println!(
-            "Precisão do IC pela T-Student de V(Nq) = {:0.5}% não é suficiente\
-             \nRodando agora para {} clientes",
+            "Precisão do IC pela T-Student de V(Nq) = {:0.5}% não é suficiente",
             100.0 * ts_ci_nq.precision(),
-            round_size + 100
         );
-        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
+        not_enough = true;
     }
 
     // Caso não tenhamos convergência dos ICs, executamos de novo para mais fregueses
     if !ConfidenceInterval::check_convergence(c2_ci_w, ts_ci_w) {
-        println!(
-            "Os intervalos de confiança para V(W) com T-Student e Chi-Square não convergem\
-             \nRodando agora para {} clientes\n",
-            round_size + 100
-        );
-        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
+        println!("Os intervalos de confiança para V(W) com T-Student e Chi-Square não convergem");
+        not_enough = true;
     }
 
     // Caso não tenhamos convergência dos ICs, executamos de novo para mais fregueses
     if !ConfidenceInterval::check_convergence(c2_ci_nq, ts_ci_nq) {
         println!(
-            "Os intervalos de confiança para V(Nq) com T-Student e Chi-Square não convergem\
-             \nRodando agora para {} clientes\n",
-            round_size + 100
+            "Os intervalos de confiança para V(Nq) com T-Student e Chi-Square não convergem"
         );
-        return simulator(rho, round_size + 100, rounds_count, queue_policy, seed);
+        not_enough = true;
+    }
+
+    if not_enough {
+        println!("Rodando agora para {} clientes", round_size + 100);
+        return simulator(rho, round_size + 100, rounds_count, queue_policy);
     }
 }
 

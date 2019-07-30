@@ -1,30 +1,32 @@
 // Módulo onde definimos o simulador
 mod simulator;
 
-// Funcionalidade de temporização da biblioteca padrão
-use std::time::SystemTime;
-
 // Importamos nosso simulador e o enum de política de fila
 use simulator::simulator;
 use simulator::QueuePolicy;
 
 fn main() {
-    let seed = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("Erro ao obter o tempo do sistema")
-        .as_secs();
-
     // Pequenos rhos, para constatar a corretude do simulador
-    let smaller_rhos = [0.1, 0.01, 0.001, 0.000_1];
-    for &small_rho in &smaller_rhos {
-        simulator(small_rho, 20_000, 3200, QueuePolicy::FCFS, seed);
-        simulator(small_rho, 20_000, 3200, QueuePolicy::LCFS, seed);
-    }
+    simulator(0.1, 10_000, 3200, QueuePolicy::FCFS);
+    simulator(0.1, 10_000, 3200, QueuePolicy::LCFS);
+
+    simulator(0.01, 10_000, 3200, QueuePolicy::FCFS);
+    simulator(0.01, 10_000, 3200, QueuePolicy::LCFS);
+
+    simulator(0.001, 10_000, 3200, QueuePolicy::FCFS);
+    simulator(0.001, 10_000, 3200, QueuePolicy::LCFS);
+
+    // Para 0.0001 começamos com 31000 pois menos do que isso ele não convergia
+    simulator(0.000_1, 31_000, 3200, QueuePolicy::FCFS);
+    simulator(0.000_1, 31_000, 3200, QueuePolicy::LCFS);
 
     // Simulação com os rhos pedidos
-    let rhos = [0.2, 0.4, 0.6, 0.8, 0.9];
+    let rhos = [0.2, 0.4, 0.6, 0.8];
     for &rho in &rhos {
-        simulator(rho, 10_000, 3200, QueuePolicy::FCFS, seed);
-        simulator(rho, 10_000, 3200, QueuePolicy::LCFS, seed);
+        simulator(rho, 1_000, 3200, QueuePolicy::FCFS);
+        simulator(rho, 1_000, 3200, QueuePolicy::LCFS);
     }
+    // Fizemos rho = 0.9 começar em 15000 pois demorava bem mais para convergir
+    simulator(0.9, 15_000, 3200, QueuePolicy::FCFS);
+    simulator(0.9, 15_000, 3200, QueuePolicy::LCFS);
 }
