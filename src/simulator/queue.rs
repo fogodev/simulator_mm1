@@ -26,6 +26,14 @@ pub enum QueuePolicy {
     LCFS,
 }
 
+// Enum para determinar em qual modo estamos rodando o simulador, no modo para valer ou no
+// modo de verificar a corretude do mesmo, com chegadas e tempo de serviço deterministicoPra
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum QueueMode {
+    ForReal,
+    CheckCorrectness
+}
+
 // Constantes das métricas de interesse
 pub const NQ: &str = "Nq";
 pub const N: &str = "N";
@@ -51,6 +59,7 @@ pub struct Queue {
     current_time: f64,                           // Tempo atual da fila
     exponential_time_generator: ExponentialTime, // Gerador de amostras exponenciais
     color: usize,                                // Cor da fila na rodada atual
+    mode: QueueMode,                              // O modo de funcionamento da fila
 }
 
 impl Queue {
@@ -72,10 +81,27 @@ impl Queue {
             current_time: 0.0,
             exponential_time_generator,
             color: 0,
+            mode: QueueMode::ForReal,
         };
         // Adiciona o evento da primeira chegada
         queue.add_event(CLIENT_ARRIVAL, first_event_duration);
         queue // Retorna a fila instanciada
+    }
+
+    pub fn check_correctness(queue_policy: QueuePolicy) -> Self {
+        Self {
+            samples: HashMap::new(),
+            stochastic_process_samples: HashMap::new(),
+            queue_policy,
+            lambda: 0.0,
+            queue: VecDeque::new(),
+            client_in_service: None,
+            past_events: vec![],
+            current_time: 0.0,
+            exponential_time_generator: ExponentialTime::new(0), // Não é usado
+            color: 0,
+            mode: QueueMode::CheckCorrectness,
+        }
     }
 
     // Inicializa os coletores de amostras das métricas de interesse
@@ -159,12 +185,16 @@ impl Queue {
 
     // Processa um evento de chegada de freguês
     fn handle_arrival_event(&mut self) {
-        // Calcula o evento da próxima chegada
-        let next_client_arrival_duration = self.exponential_time_generator.get(self.lambda);
-        // Adiciona o evento da próxima chegada na lista de eventos
-        self.add_event(CLIENT_ARRIVAL, next_client_arrival_duration);
         // Instancia um novo freguês para entrar na fila ou ser atendido
-        let mut client = Client::new(self.exponential_time_generator.get(1.0), self.color);
+        let mut client = if self.mode == QueueMode::ForReal {
+            // Calcula o evento da próxima chegada
+            let next_client_arrival_duration = self.exponential_time_generator.get(self.lambda);
+            // Adiciona o evento da próxima chegada na lista de eventos caso seja uma simulação real
+            self.add_event(CLIENT_ARRIVAL, next_client_arrival_duration);
+            Client::new(self.exponential_time_generator.get(1.0), self.color)
+        } else {
+            Client::new(0.0, self.color)
+        };
         // Marca o inicio da espera desse freguês
         client.register_start(W, self.current_time);
         // Verifica se a fila está vazia e se não tem nenhum cliente em serviço
@@ -175,7 +205,9 @@ impl Queue {
             // Inicializa o período do atendimento desse freguês
             client.register_start(X, self.current_time);
             // Adiciona o evento do fim de serviço desse freguês de acordo com seu X
-            self.add_event(END_OF_SERVICE, client.x());
+            if self.mode == QueueMode::ForReal {
+                self.add_event(END_OF_SERVICE, client.x());
+            }
             self.client_in_service = Some(client); // Colocamos esse freguês em atendimento
         } else {
             // Caso haja alguém na fila ou alguém sendo atendido, freguês vai pra fila de espera
@@ -287,26 +319,51 @@ impl Queue {
         self.initialize_sample_collectors(client_count);
         self.register_current_state_values(); // Registra o estado atual da fila
         let mut client = 0;
-        while client < client_count {
-            // Enquanto não processarmos todos os clientes pedidos
-            let event = self.get_next_event(); // Pegamos o próximo evento
-            self.current_time = event.birth_time + event.duration; // Atualizamos o tempo atual da fila
-            if CLIENT_ARRIVAL == event.name {
-                // Caso seja evento de chegada de freguês
-                self.handle_arrival_event(); // Processamos a chegada
-            } else if END_OF_SERVICE == event.name {
-                // Caso seja evento de fim de serviço
-                if let Some(current_client) = &self.client_in_service {
-                    if current_client.color() == self.color {
-                        // Contabilizamos o cliente satisfeito nessa rodada caso seja da cor atual
-                        client += 1;
+       if self.mode == QueueMode::ForReal {
+           while client < client_count {
+               // Enquanto não processarmos todos os clientes pedidos
+               let event = self.get_next_event(); // Pegamos o próximo evento
+               self.current_time = event.birth_time + event.duration; // Atualizamos o tempo atual da fila
+               if CLIENT_ARRIVAL == event.name {
+                   // Caso seja evento de chegada de freguês
+                   self.handle_arrival_event(); // Processamos a chegada
+               } else if END_OF_SERVICE == event.name {
+                   // Caso seja evento de fim de serviço
+                   if let Some(current_client) = &self.client_in_service {
+                       if current_client.color() == self.color {
+                           // Contabilizamos o cliente satisfeito nessa rodada caso seja da cor atual
+                           client += 1;
+                       }
+                   }
+                   self.end_of_service_event(); // Processamos a saída
+               } else {
+                   panic!("Tipo de evento inválido"); // Apenas eventos de chegada e saída são válidos
+               }
+           }
+       } else {
+           // Aqui forçamos uma fila onde temos chegadas nos momentos 0, 1, 2 e 3, com tempo
+           // de serviço constante igual a 2, de maneira que assim temos um resultado deterministico
+           // temos um ciclo de 9 segundos de duração
+            while client < client_count {
+                for _step in 0..9 {
+                    match _step {
+                        0 => self.handle_arrival_event(),
+                        1 => self.handle_arrival_event(),
+                        2 => {
+                            self.handle_arrival_event();
+                            self.end_of_service_event();
+                        },
+                        3 => self.handle_arrival_event(),
+                        4 => self.end_of_service_event(),
+                        6 => self.end_of_service_event(),
+                        8 => self.end_of_service_event(),
+                        _ => ()
                     }
+                    self.current_time += 1.0;
                 }
-                self.end_of_service_event(); // Processamos a saída
-            } else {
-                panic!("Tipo de evento inválido"); // Apenas eventos de chegada e saída são válidos
+                client += 4; // Tendo em vista que 4 clientes chegaram e saíram em cada ciclo
             }
-        }
+       }
         // Estratégia abaixo é usada para remover e retornar os coletores de amostras da struct
         // sem a necessidade de copiar seus dados, por questões de performance
         let mut output_samples = HashMap::new();

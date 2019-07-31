@@ -29,6 +29,8 @@ use statistics_output_files::write_csv_file;
 
 // Exportando o enum da nossa política de fila, pra ser usado por quem chamar o simulador
 pub(crate) use queue::QueuePolicy;
+// Exportando o enum do nosso modo de simulação de fila, pra ser usado por quem chamar o simulador
+pub(crate) use queue::QueueMode;
 
 // Função interna que constrói um HashMap para coleta de amostras das métricas N, T e X
 fn statistics_hash_map(rounds_count: usize) -> HashMap<String, Sample> {
@@ -45,6 +47,7 @@ pub fn simulator(
     round_size: usize,         // Quantidade de fregueses por rodada
     rounds_count: usize,       // Quantidade de rodadas
     queue_policy: QueuePolicy, // Política de atendimento FCFS ou LCFS
+    queue_mode: QueueMode,     // Modo de simulação
 ) {
     // Semente a ser utilizada pelo gerador de amostras exponenciais
     let seed = SystemTime::now()
@@ -69,14 +72,28 @@ pub fn simulator(
     let mut nq_variance_statistics = Sample::new(rounds_count);
 
     // Objeto que representa nossa fila M/M/1
-    let mut queue = Queue::new(rho, queue_policy, seed);
+    let mut queue = if queue_mode == QueueMode::ForReal {
+        Queue::new(rho, queue_policy, seed)
+    } else {
+        Queue::check_correctness(queue_policy)
+    };
 
     // Executando a fase transiente
-    let transient_phase_size = queue.transient_phase();
-    println!(
-        "\nTotal de fregueses = {}; Política = {:?}; ρ = {}; Tamanho da fase transiente = {}\n",
-        round_size, queue_policy, rho, transient_phase_size
-    );
+    let transient_phase_size = if queue_mode == QueueMode::ForReal {
+        queue.transient_phase()
+    } else {0};
+    if queue_mode == QueueMode::ForReal {
+        println!(
+            "\nTotal de fregueses = {}; Política = {:?}; ρ = {}; Tamanho da fase transiente = {}\n",
+            round_size, queue_policy, rho, transient_phase_size
+        );
+    } else {
+        println!(
+            "\nSimulação para aferição de Corretude do Simulador!\
+            \nTotal de fregueses = {}; Política = {:?};",
+            round_size, queue_policy
+        );
+    }
 
     // Instanciando a barra de progresso que informa o andamento das rodadas de simulação
     let progress_bar = ProgressBar::new(rounds_count as u64);
@@ -218,13 +235,36 @@ pub fn simulator(
     );
 
     // Calculando valores analíticos para E[W], V(W), E[Nq], V(Nq)
-    let analytic_mean_w = rho / (1.0 - rho);
-    let analytic_variance_w = match queue_policy {
-        QueuePolicy::FCFS => (2.0 * rho - rho.powi(2)) / ((1.0 - rho) * (1.0 - rho)),
-        QueuePolicy::LCFS => (2.0 * rho - rho.powi(2) + rho.powi(3)) / ((1.0 - rho).powi(3)),
+    let analytic_mean_w = if queue_mode == QueueMode::ForReal {
+        rho / (1.0 - rho)
+    } else {
+        // Cálculo da esperança pela definição, ignoramos o valor de 0 * (1 / 4)
+        1.0 * (1.0 / 4.0) + 3.0 * (1.0 / 4.0) + 2.0 * (1.0 / 4.0)
     };
-    let analytic_mean_nq = rho.powi(2) / (1.0 - rho);
-    let analytic_variance_nq = (rho.powi(2) + rho.powi(3) - rho.powi(4)) / (1.0 - rho).powi(2);
+    let analytic_variance_w = match queue_policy {
+        QueuePolicy::FCFS => if queue_mode == QueueMode::ForReal {
+            (2.0 * rho - rho.powi(2)) / ((1.0 - rho) * (1.0 - rho))
+        } else {
+            1.0 * (1.0 / 4.0) + (2.0 * 2.0) * (1.0 / 4.0) + (3.0 * 3.0) * (1.0 / 4.0) - analytic_mean_w.powi(2)
+        },
+        QueuePolicy::LCFS => if queue_mode == QueueMode::ForReal {
+            (2.0 * rho - rho.powi(2) + rho.powi(3)) / ((1.0 - rho).powi(3))
+        } else {
+            1.0 * (1.0 / 4.0) + (5.0 * 5.0) * (1.0 / 4.0) - analytic_mean_w.powi(2)
+        }
+    };
+    let analytic_mean_nq = if queue_mode == QueueMode::ForReal {
+        rho.powi(2) / (1.0 - rho)
+    } else {
+        // Cálculo da esperança pela definição ignoramos o 0 * (4 / 9)
+        1.0 * (4.0 / 9.0) + 2.0 * (1.0 / 9.0)
+    };
+    let analytic_variance_nq = if queue_mode == QueueMode::ForReal {
+        (rho.powi(2) + rho.powi(3) - rho.powi(4)) / (1.0 - rho).powi(2)
+    } else {
+        // Segundo momento - quadrado da média, ignorando o 0 * (4 / 9)
+        (1.0 * (4.0 / 9.0) + (2.0 * 2.0) * (1.0 / 9.0)) - analytic_mean_nq.powi(2)
+    };
     println!(
         "Analytical values:\n\tE[W]  = {:0.5}\n\tV(W)  = {:0.5}\n\tE[Nq] = {:0.5}\n\tV(Nq) = {:0.5}",
         analytic_mean_w, analytic_variance_w, analytic_mean_nq, analytic_variance_nq
@@ -324,10 +364,13 @@ pub fn simulator(
         );
         not_enough = true;
     }
+    if queue_mode == QueueMode::CheckCorrectness {
+        not_enough = false;
+    }
 
     if not_enough {
         println!("Rodando agora para {} clientes", round_size + 100);
-        return simulator(rho, round_size + 100, rounds_count, queue_policy);
+        return simulator(rho, round_size + 100, rounds_count, queue_policy, queue_mode);
     }
 }
 
